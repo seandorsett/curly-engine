@@ -1,0 +1,159 @@
+# Demo 1 - Service container entrypoint and command overrides
+# Feature shipped: early April 2026
+#
+# Before this release, the `services:` block accepted `image`, `credentials`,
+# `env`, `ports`, `volumes`, and `options`. To launch a service with custom
+# arguments you had to stuff everything into `options:` (which only forwards
+# flags to `docker create`) or bake a custom image.
+#
+# With the April 2026 release you can set `entrypoint:` and `command:` directly,
+# exactly like `docker run --entrypoint ... <image> <command>`.
+name: demo-1 service container overrides
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/demo-service-containers.yml"
+      - "src/**"
+      - "tests/**"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # The "old way": the only knob we had was `options:`. Works, but everything
+  # that isn't a docker flag has to live inside a custom image or a shell
+  # gymnastic. Kept here for the side-by-side on stage.
+  # ---------------------------------------------------------------------------
+  before-overrides:
+    name: before (options-only)
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: round-trip against an unauthenticated redis
+        env:
+          REDIS_HOST: localhost
+          REDIS_PORT: "6379"
+        run: pytest -q
+
+  # ---------------------------------------------------------------------------
+  # The "new way": override the entrypoint to force redis to require a password,
+  # and pass the password via `command:`. No custom image, no wrapper script.
+  # ---------------------------------------------------------------------------
+  with-entrypoint-override:
+    name: after (entrypoint + command)
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        # NEW in April 2026 - sets the container ENTRYPOINT.
+        entrypoint: redis-server
+        # NEW in April 2026 - args appended after the entrypoint.
+        command: >-
+          --requirepass ${{ secrets.REDIS_PASSWORD || 'office-hours-demo' }}
+          --maxmemory 64mb
+          --maxmemory-policy allkeys-lru
+        options: >-
+          --health-cmd "redis-cli -a ${{ secrets.REDIS_PASSWORD || 'office-hours-demo' }} ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: round-trip against an authenticated redis
+        env:
+          REDIS_HOST: localhost
+          REDIS_PORT: "6379"
+          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD || 'office-hours-demo' }}
+          REDIS_REQUIRE_AUTH: "1"
+        run: pytest -q
+
+  # ---------------------------------------------------------------------------
+  # Bonus stop for the demo: same syntax with a totally different image.
+  # We swap Postgres' entrypoint to run an init SQL script before the server
+  # starts. Previously this required a custom Dockerfile + image push.
+  # ---------------------------------------------------------------------------
+  postgres-bootstrap:
+    name: after (postgres bootstrap)
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:16-alpine
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_PASSWORD: demo
+          POSTGRES_DB: curly
+        # Override the entrypoint to drop a seed file into the init.d dir
+        # before chaining back to the stock docker-entrypoint.sh.
+        entrypoint: /bin/sh
+        command: >-
+          -c "echo \"CREATE TABLE pings(id serial primary key, note text);\"
+              > /docker-entrypoint-initdb.d/00-seed.sql
+              && exec docker-entrypoint.sh postgres"
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: confirm the seed table exists
+        env:
+          PGPASSWORD: demo
+        run: |
+          sudo apt-get update && sudo apt-get install -y postgresql-client
+          psql -h localhost -U postgres -d curly -c "\\dt"
+          psql -h localhost -U postgres -d curly -c "INSERT INTO pings(note) VALUES ('hello from the demo') RETURNING *;"
+
+  # ---------------------------------------------------------------------------
+  # Hook the webhook harness so the audience sees events stream in live as the
+  # workflow progresses. WEBHOOK_URL is configured as a repo variable that
+  # points at the ngrok/cloudflared tunnel running on the presenter laptop.
+  # ---------------------------------------------------------------------------
+  notify-harness:
+    name: notify webhook harness
+    needs: [before-overrides, with-entrypoint-override, postgres-bootstrap]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: push status to harness
+        if: vars.WEBHOOK_URL != ''
+        env:
+          WEBHOOK_URL: ${{ vars.WEBHOOK_URL }}
+          WEBHOOK_TOKEN: ${{ secrets.WEBHOOK_TOKEN }}
+        run: |
+          payload=$(jq -n \
+            --arg demo "service-container-overrides" \
+            --arg run  "${{ github.run_id }}" \
+            --arg sha  "${{ github.sha }}" \
+            --arg b1   "${{ needs.before-overrides.result }}" \
+            --arg b2   "${{ needs.with-entrypoint-override.result }}" \
+            --arg b3   "${{ needs.postgres-bootstrap.result }}" \
+            '{demo:$demo, run_id:$run, sha:$sha,
+              jobs:{before:$b1, after:$b2, postgres:$b3}}')
+          curl -sS -X POST "$WEBHOOK_URL/events" \
+            -H "content-type: application/json" \
+            -H "x-demo-token: $WEBHOOK_TOKEN" \
+            -d "$payload"

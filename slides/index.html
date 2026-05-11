@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Office Hours - GitHub Actions: April 2026 highlights</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg: #0d1117;
+    --fg: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #7ee787;
+    --warn: #f0883e;
+    --card: #161b22;
+    --line: #30363d;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+               font: 18px/1.5 -apple-system, system-ui, "Segoe UI", sans-serif; }
+  #deck { position: fixed; inset: 0; display: grid; place-items: center; }
+  .slide {
+    width: min(1120px, 94vw);
+    height: min(680px, 86vh);
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 48px 56px;
+    display: none;
+    flex-direction: column;
+    gap: 18px;
+    box-shadow: 0 30px 80px rgba(0,0,0,.45);
+  }
+  .slide.active { display: flex; }
+  .slide h1 { font-size: 44px; margin: 0; letter-spacing: -.5px; }
+  .slide h2 { font-size: 30px; margin: 0; color: var(--accent); }
+  .slide h3 { font-size: 22px; margin: 0 0 6px; color: var(--accent-2); }
+  .slide p, .slide li { font-size: 20px; }
+  .slide ul { margin: 0; padding-left: 24px; }
+  .slide li { margin: 6px 0; }
+  .eyebrow { color: var(--muted); text-transform: uppercase; letter-spacing: 2px; font-size: 13px; }
+  .pill { display: inline-block; padding: 4px 10px; border-radius: 999px;
+          background: rgba(88,166,255,.15); color: var(--accent); font-size: 13px;
+          border: 1px solid rgba(88,166,255,.35); }
+  .pill.warn { background: rgba(240,136,62,.15); color: var(--warn); border-color: rgba(240,136,62,.35); }
+  .pill.good { background: rgba(126,231,135,.15); color: var(--accent-2); border-color: rgba(126,231,135,.35); }
+  pre { background: #010409; border: 1px solid var(--line); border-radius: 10px;
+        padding: 16px 18px; overflow: auto; font: 14px/1.55 var(--mono); margin: 0; }
+  pre .k { color: #ff7b72; }      /* keyword */
+  pre .s { color: #a5d6ff; }      /* string */
+  pre .c { color: #8b949e; font-style: italic; }
+  pre .n { color: #ffa657; }      /* number / name */
+  pre .hl { background: rgba(126,231,135,.12); border-left: 3px solid var(--accent-2);
+            display: block; margin: 0 -18px; padding: 0 15px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; flex: 1; min-height: 0; }
+  .grid2 > div { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+  .grid2 pre { flex: 1; }
+  .footer { position: fixed; bottom: 12px; left: 0; right: 0; display: flex;
+            justify-content: space-between; padding: 0 24px; color: var(--muted);
+            font-size: 13px; font-family: var(--mono); }
+  .footer button { background: transparent; color: var(--muted); border: 1px solid var(--line);
+                   border-radius: 6px; padding: 4px 10px; cursor: pointer; font: inherit; }
+  .footer button:hover { color: var(--fg); border-color: var(--accent); }
+  kbd { font-family: var(--mono); background: #21262d; border: 1px solid var(--line);
+        border-bottom-width: 2px; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+  .timer { font-family: var(--mono); }
+  .row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<div id="deck"></div>
+<div class="footer">
+  <div class="row">
+    <span id="counter">1 / 1</span>
+    <span class="timer" id="timer">00:00</span>
+    <button id="reset-timer">reset timer</button>
+  </div>
+  <div class="row">
+    <span><kbd>&larr;</kbd> <kbd>&rarr;</kbd> nav &middot; <kbd>p</kbd> presenter view &middot; <kbd>f</kbd> fullscreen</span>
+    <button id="open-notes">open presenter view</button>
+  </div>
+</div>
+
+<!-- ============================================================
+     Slide source. Each <template data-notes="..."> becomes a slide;
+     the data-notes attribute is mirrored to the presenter window.
+     ============================================================ -->
+
+<template class="slide-src"
+  data-notes="Welcome. Two features from the last quarter that quietly remove pain in real workflows. Set expectations: ~25 min of content + 10 min Q&A. The webhook harness on the side screen is live — when I trigger workflows you'll see events arrive there in real time.">
+  <span class="eyebrow">Office Hours &middot; 2026-05-12</span>
+  <h1>Two quietly-useful GitHub Actions updates</h1>
+  <p style="color: var(--muted); font-size: 22px;">
+    Service container <code>entrypoint</code> / <code>command</code> overrides &middot;
+    <code>deployment: false</code> environments
+  </p>
+  <div style="margin-top: auto;" class="row">
+    <span class="pill">~25 min walkthrough</span>
+    <span class="pill good">live demo</span>
+    <span class="pill warn">Q&amp;A at the end</span>
+  </div>
+</template>
+
+<template class="slide-src"
+  data-notes="Quick map of the next 25 minutes so people know when each demo lands. Mention: every slide has talking points in the secondary window I'm reading from — that's why my eyes keep going off-screen.">
+  <h2>Agenda</h2>
+  <ul>
+    <li><b>0&ndash;3 min</b> &middot; the two features in one breath</li>
+    <li><b>3&ndash;13 min</b> &middot; Demo 1: service container <code>entrypoint</code> + <code>command</code></li>
+    <li><b>13&ndash;23 min</b> &middot; Demo 2: <code>deployment: false</code> environments</li>
+    <li><b>23&ndash;25 min</b> &middot; webhook harness recap &amp; gotchas</li>
+    <li><b>25&ndash;35 min</b> &middot; Q&amp;A</li>
+  </ul>
+</template>
+
+<template class="slide-src"
+  data-notes="One-sentence version of each feature. Don't go into syntax yet — that's the next two sections. The point of this slide is to set the 'why does this matter' frame: both features remove the need for a workaround we've all been doing for years.">
+  <h2>The TL;DR</h2>
+  <div class="grid2">
+    <div>
+      <h3>Service container overrides</h3>
+      <p>You can finally set <code>entrypoint:</code> and <code>command:</code> on a <code>services:</code> entry. No more baking custom images just to flip a flag.</p>
+      <span class="pill">shipped early April 2026</span>
+    </div>
+    <div>
+      <h3><code>deployment: false</code></h3>
+      <p>Use an environment for its <i>secrets</i> and <i>approvals</i> without producing a <code>Deployment</code> object, webhook, or timeline entry.</p>
+      <span class="pill">shipped Q1 2026, GA April</span>
+    </div>
+  </div>
+</template>
+
+<template class="slide-src"
+  data-notes="Pain point setup for demo 1. Most people in the room have hit this — they wanted Redis with a password, or Postgres with a seed file, and ended up either writing a Dockerfile or doing a 'sleep + redis-cli CONFIG SET' dance in a step. Ask the room: 'who has a custom service image just to add one flag?' — usually a few hands.">
+  <h2>Demo 1 &middot; The pain we're removing</h2>
+  <ul>
+    <li>The <code>services:</code> block historically only let you tweak the image with <code>options:</code>, which forwards to <code>docker create</code>.</li>
+    <li>Anything that changed how the <i>process</i> ran (auth, init scripts, alt configs) required a custom image push or a step-level hack.</li>
+    <li>Result: a fleet of one-flag-different forks of <code>redis:alpine</code>, <code>postgres:16</code>, etc.</li>
+  </ul>
+  <p style="margin-top:auto;" class="pill warn">Show of hands: who maintains a custom service image right now?</p>
+</template>
+
+<template class="slide-src"
+  data-notes="This is the side-by-side. Spend ~90s here. Point at the right-hand column: 'entrypoint and command are siblings of image. They behave like docker run --entrypoint X image Y Z.' Note the health-check on the right now uses -a because the server is password-protected — same secret on both sides.">
+  <h2>Demo 1 &middot; Before &amp; after</h2>
+  <div class="grid2">
+    <div>
+      <h3>Before</h3>
+<pre><span class="k">services</span>:
+  <span class="n">redis</span>:
+    <span class="k">image</span>: <span class="s">redis:7-alpine</span>
+    <span class="k">options</span>: >-
+      --health-cmd <span class="s">"redis-cli ping"</span>
+<span class="c"># password? bake a custom image
+# or run CONFIG SET in a step</span></pre>
+    </div>
+    <div>
+      <h3>After (April 2026)</h3>
+<pre><span class="k">services</span>:
+  <span class="n">redis</span>:
+    <span class="k">image</span>: <span class="s">redis:7-alpine</span>
+<span class="hl">    <span class="k">entrypoint</span>: <span class="s">redis-server</span></span>
+<span class="hl">    <span class="k">command</span>: >-
+      --requirepass ${{ secrets.PW }}
+      --maxmemory 64mb</span>
+    <span class="k">options</span>: >-
+      --health-cmd <span class="s">"redis-cli -a $PW ping"</span></pre>
+    </div>
+  </div>
+</template>
+
+<template class="slide-src"
+  data-notes="Switch to the browser and run the workflow. Open .github/workflows/demo-service-containers.yml in one tab and the Actions run in the other. Trigger via Run workflow. While it's running, narrate the three jobs: before-overrides, with-entrypoint-override, postgres-bootstrap. Total run time is ~90s; if it's slow, jump back to slides and come back.">
+  <h2>Demo 1 &middot; Live</h2>
+  <ul>
+    <li>Trigger <code>demo-1 service container overrides</code> via <i>Run workflow</i>.</li>
+    <li>Three jobs run in parallel:
+      <ul>
+        <li><code>before-overrides</code> &mdash; baseline, no auth.</li>
+        <li><code>with-entrypoint-override</code> &mdash; redis with <code>--requirepass</code>.</li>
+        <li><code>postgres-bootstrap</code> &mdash; swap entrypoint to drop a seed file before <code>docker-entrypoint.sh</code>.</li>
+      </ul>
+    </li>
+    <li>Watch the harness window: each job posts a status payload when it finishes.</li>
+  </ul>
+</template>
+
+<template class="slide-src"
+  data-notes="Land the value here. Don't list ALL use cases — pick three that resonate. Also surface the gotcha: entrypoint replaces, not appends. If you only set command, the image's entrypoint still runs (useful) — if you only set entrypoint, you have to provide arguments yourself.">
+  <h2>Demo 1 &middot; Where this earns its keep</h2>
+  <ul>
+    <li><b>Auth-required test fixtures.</b> Redis, MySQL, Mongo &mdash; turn auth on with a flag instead of a Dockerfile.</li>
+    <li><b>Init-time bootstrap.</b> Drop seed SQL/JSON into the image's init.d before the real entrypoint runs.</li>
+    <li><b>Alternate binaries.</b> Same image, different daemon (e.g. <code>redis-sentinel</code> instead of <code>redis-server</code>).</li>
+  </ul>
+  <p class="pill warn" style="margin-top:auto">Gotcha: <code>entrypoint</code> replaces the image default. If you only need to pass args, set <code>command:</code> alone.</p>
+</template>
+
+<template class="slide-src"
+  data-notes="Pivot to demo 2. Re-set the frame: environments are great, but they were over-coupled to 'shipping a version of the app'. Lots of workflows want the *gate* (approvals + scoped secrets) without claiming a deployment happened. Give a concrete example: a quarterly cache key rotation that needs prod creds.">
+  <h2>Demo 2 &middot; What environments were missing</h2>
+  <ul>
+    <li>An <code>environment:</code> block bundles three things together:
+      <ol>
+        <li>required reviewers / wait timers / branch policies</li>
+        <li>environment-scoped <i>secrets</i> and <i>variables</i></li>
+        <li>a <code>Deployment</code> + <code>DeploymentStatus</code> record (UI row + webhook)</li>
+      </ol>
+    </li>
+    <li>Sometimes you want #1 and #2 but not #3.</li>
+    <li>Old workaround: a second environment named <code>prod-ops</code> with the same secrets, or worse, repo-level secrets gated by manual review.</li>
+  </ul>
+</template>
+
+<template class="slide-src"
+  data-notes="The whole feature in one diff. Read it out loud: 'set deployment to false to opt out of the deployment record while keeping everything else.' Mention that the `deployments: write` permission is still required for jobs that DO want a real deployment — that's why the workflow declares it at the top.">
+  <h2>Demo 2 &middot; The whole feature in 5 lines</h2>
+<pre><span class="k">jobs</span>:
+  <span class="n">audit-prod-config</span>:
+    <span class="k">runs-on</span>: <span class="s">ubuntu-latest</span>
+    <span class="k">environment</span>:
+      <span class="k">name</span>: <span class="s">production</span>
+<span class="hl">      <span class="k">deployment</span>: <span class="n">false</span>   <span class="c"># keep the gate, drop the deployment record</span></span>
+    <span class="k">steps</span>:
+      - <span class="k">run</span>: <span class="s">./scripts/audit.sh</span>
+        <span class="k">env</span>:
+          API_TOKEN: ${{ secrets.API_TOKEN }}</pre>
+  <ul style="margin-top:14px">
+    <li>Required reviewers? <span class="pill good">still apply</span></li>
+    <li>Environment secrets? <span class="pill good">still scoped</span></li>
+    <li><code>deployment</code> webhook? <span class="pill warn">not fired</span></li>
+    <li>Environments UI row? <span class="pill warn">not created</span></li>
+  </ul>
+</template>
+
+<template class="slide-src"
+  data-notes="Two runs side by side in the Actions UI. Trigger demo-2 twice: once with target=staging (real ship, creates a Deployment), once with target=ops-readonly (audit job, no Deployment). Then flip to the harness window — only the first run shows a deployment event. That's the money shot.">
+  <h2>Demo 2 &middot; Live A/B</h2>
+  <ul>
+    <li>Run <code>demo-2</code> with <code>target=staging</code> &rarr; <code>ship-it</code> creates a Deployment.</li>
+    <li>Run <code>demo-2</code> with <code>target=ops-readonly</code> &rarr; <code>audit-prod-config</code> uses the same secrets &amp; reviewers, but emits <i>no</i> deployment.</li>
+    <li>Switch to the harness UI and filter by <code>type = deployment</code>: only one run appears.</li>
+    <li>Open the SHA in the Code tab &mdash; only one green bubble next to it.</li>
+  </ul>
+</template>
+
+<template class="slide-src"
+  data-notes="Use cases that hit home. Cache rotation, secret rotation, audit scripts, smoke tests against prod, schema-drift checks. All of these used to either create misleading deployment rows or get gated through repo secrets without proper review. Now they don't have to.">
+  <h2>Demo 2 &middot; Where this earns its keep</h2>
+  <ul>
+    <li><b>Maintenance workflows</b> &mdash; cache/secret rotation, key rolls, cron-style cleanups.</li>
+    <li><b>Read-only prod audits</b> &mdash; drift detection, config dumps, compliance scans.</li>
+    <li><b>Smoke tests post-release</b> &mdash; want prod creds + approval, but the deploy already happened upstream.</li>
+    <li><b>Data exports</b> &mdash; touching prod data with reviewer approval, not "shipping" anything.</li>
+  </ul>
+</template>
+
+<template class="slide-src"
+  data-notes="Quick tour of the harness while it's on screen. It's a tiny Express server that accepts POSTs from the workflows and re-broadcasts them over SSE to its own UI. Useful for showing causality: when a job finishes, an event appears. Also useful for our own integration tests — the test harness in the repo asserts the right events for the right jobs.">
+  <h2>The webhook harness</h2>
+  <ul>
+    <li><code>POST /events</code> &mdash; workflow jobs push status here.</li>
+    <li><code>GET /stream</code> &mdash; Server-Sent Events feed consumed by the dashboard.</li>
+    <li><code>GET /</code> &mdash; live table; filter by demo, run, or job result.</li>
+    <li>Auth: <code>x-demo-token</code> header matches <code>WEBHOOK_TOKEN</code>.</li>
+    <li>Run it as <code>node webhook-harness/server.js</code> behind <code>cloudflared</code>/<code>ngrok</code>; point the repo variable <code>WEBHOOK_URL</code> at the tunnel.</li>
+  </ul>
+</template>
+
+<template class="slide-src"
+  data-notes="Gotchas worth calling out so people don't get bitten in the parking lot. Service containers: entrypoint resets, not appends. deployment:false: still need an environment to exist in repo settings; protection rules still apply, so don't be surprised when the job pauses for approval.">
+  <h2>Gotchas</h2>
+  <ul>
+    <li><b>Service overrides</b>: <code>entrypoint</code> <i>replaces</i> the image default. To just add args, set <code>command:</code> only.</li>
+    <li><b>Service overrides</b>: shell expansion happens in the runner's shell, not the container &mdash; quote carefully.</li>
+    <li><b>deployment: false</b>: the environment must still exist in repo settings; approvals/wait-timers still apply.</li>
+    <li><b>deployment: false</b>: jobs that previously listened for <code>deployment_status</code> webhooks won't see these runs &mdash; intentional, but worth auditing.</li>
+  </ul>
+</template>
+
+<template class="slide-src"
+  data-notes="Wrap. Repeat the one-sentence summary of each feature. Point at the repo URL on screen. Open the floor — and remember the harness is still running, so if anyone wants to trigger the workflows themselves we can watch the events stream in.">
+  <h1>Recap &amp; questions</h1>
+  <ul>
+    <li>Two features, one theme: <i>fewer workarounds</i>.</li>
+    <li><code>services:</code> &mdash; override <code>entrypoint</code> + <code>command</code>; stop maintaining custom images for one-flag changes.</li>
+    <li><code>deployment: false</code> &mdash; use environments for gates &amp; secrets without polluting the deployments timeline.</li>
+  </ul>
+  <p style="margin-top:auto" class="pill good">repo: github.com/seandorsett/curly-engine &middot; branch: claude/github-actions-features-71S3r</p>
+</template>
+
+<script>
+(() => {
+  const deck   = document.getElementById('deck');
+  const tmpl   = document.querySelectorAll('template.slide-src');
+  const slides = [];
+  const notes  = [];
+
+  tmpl.forEach((t, i) => {
+    const div = document.createElement('section');
+    div.className = 'slide';
+    div.dataset.index = i;
+    div.innerHTML = t.innerHTML;
+    deck.appendChild(div);
+    slides.push(div);
+    notes.push(t.dataset.notes || '');
+  });
+
+  let idx = 0;
+  // pick up ?s=N from the URL so the presenter window can navigate
+  const params = new URLSearchParams(location.search);
+  if (params.has('s')) idx = Math.max(0, Math.min(slides.length - 1, parseInt(params.get('s'), 10) || 0));
+
+  const channel = new BroadcastChannel('curly-deck');
+  const counter = document.getElementById('counter');
+
+  function render() {
+    slides.forEach((s, i) => s.classList.toggle('active', i === idx));
+    counter.textContent = `${idx + 1} / ${slides.length}`;
+    channel.postMessage({ type: 'slide', index: idx, total: slides.length,
+                          notes: notes[idx], title: slides[idx].querySelector('h1,h2')?.textContent || '' });
+    history.replaceState(null, '', `?s=${idx}`);
+  }
+
+  function go(delta) {
+    idx = Math.max(0, Math.min(slides.length - 1, idx + delta));
+    render();
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { go(1); e.preventDefault(); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { go(-1); e.preventDefault(); }
+    else if (e.key === 'Home') { idx = 0; render(); }
+    else if (e.key === 'End')  { idx = slides.length - 1; render(); }
+    else if (e.key === 'f' || e.key === 'F') {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen();
+    } else if (e.key === 'p' || e.key === 'P') openNotes();
+  });
+
+  // listen for nav from the presenter window
+  channel.addEventListener('message', (e) => {
+    if (e.data?.type === 'nav') { idx = e.data.index; render(); }
+    else if (e.data?.type === 'request-state') { render(); }
+  });
+
+  // ---- timer ----
+  const timerEl = document.getElementById('timer');
+  let started = Date.now();
+  function tickTimer() {
+    const s = Math.floor((Date.now() - started) / 1000);
+    const mm = String(Math.floor(s / 60)).padStart(2, '0');
+    const ss = String(s % 60).padStart(2, '0');
+    timerEl.textContent = `${mm}:${ss}`;
+    channel.postMessage({ type: 'timer', seconds: s });
+  }
+  setInterval(tickTimer, 1000);
+  document.getElementById('reset-timer').onclick = () => { started = Date.now(); tickTimer(); };
+
+  // ---- open presenter view ----
+  function openNotes() {
+    const w = window.open('notes.html', 'curly-notes',
+      'popup=yes,width=720,height=820,menubar=no,toolbar=no,status=no');
+    if (!w) alert('Allow popups for this origin to use presenter view.');
+  }
+  document.getElementById('open-notes').onclick = openNotes;
+
+  render();
+})();
+</script>
+</body>
+</html>

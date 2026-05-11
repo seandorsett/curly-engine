@@ -1,0 +1,14 @@
+{
+  "name": "curly-engine-webhook-harness",
+  "version": "0.1.0",
+  "description": "Tiny zero-dependency webhook + workflow-event monitor for the GitHub Actions office hours demo.",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test":  "node test/harness.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
