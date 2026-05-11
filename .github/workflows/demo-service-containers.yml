@@ -144,6 +144,12 @@ jobs:
           WEBHOOK_URL: ${{ vars.WEBHOOK_URL }}
           WEBHOOK_TOKEN: ${{ secrets.WEBHOOK_TOKEN }}
         run: |
+          # Strip whitespace/CR that often hitches a ride when the tunnel URL
+          # is pasted into the repo variable from a browser. curl is strict
+          # about control chars in URLs and will refuse with "Malformed input".
+          url=$(printf '%s' "$WEBHOOK_URL" | tr -d '[:space:]')
+          url=${url%/}   # also drop a trailing slash so we don't post to //events
+          echo "harness target: ${url}/events"
           payload=$(jq -n \
             --arg demo "service-container-overrides" \
             --arg run  "${{ github.run_id }}" \
@@ -153,7 +159,7 @@ jobs:
             --arg b3   "${{ needs.postgres-bootstrap.result }}" \
             '{demo:$demo, run_id:$run, sha:$sha,
               jobs:{before:$b1, after:$b2, postgres:$b3}}')
-          curl -sS -X POST "$WEBHOOK_URL/events" \
+          curl -sS --fail-with-body -X POST "${url}/events" \
             -H "content-type: application/json" \
             -H "x-demo-token: $WEBHOOK_TOKEN" \
             -d "$payload"
