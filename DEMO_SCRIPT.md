@@ -50,20 +50,39 @@ curly-engine/
    cd webhook-harness
    WEBHOOK_TOKEN=office-hours-demo node server.js
    ```
-   Confirm: `http://localhost:4317/healthz` returns `{"ok":true}`.
-4. **Terminal 2 - tunnel** (cloudflared or ngrok):
+   Confirm it started: `http://localhost:4317/healthz` should return `{"ok":true}`.
+
+4. **Terminal 2 - local smoke test** (no tunnel needed — this confirms the harness works):
    ```bash
-   cloudflared tunnel --url http://localhost:4317
-   ```
-   Copy the public URL into the `WEBHOOK_URL` repo variable.
-5. **Terminal 3 - smoke test the harness end-to-end:**
-   ```bash
-   curl -sS -X POST "$WEBHOOK_URL/events" \
+   curl -sS -X POST "http://localhost:4317/events" \
      -H "content-type: application/json" \
      -H "x-demo-token: office-hours-demo" \
      -d '{"demo":"smoke","run_id":"0","sha":"0000000","jobs":{"smoke":"success"}}'
    ```
-   You should see the row appear in the dashboard.
+   You should get `{"accepted":true}` and see the row appear in the dashboard at `http://localhost:4317`.
+
+5. **Terminal 2 - tunnel** (only needed so GitHub-hosted runners can reach the harness):
+   ```bash
+   # cloudflared (no account needed)
+   cloudflared tunnel --url http://localhost:4317
+
+   # or ngrok (free account + authtoken required)
+   ngrok http 4317
+
+   # or localtunnel (no install, no account)
+   npx localtunnel --port 4317
+   ```
+   Copy the public URL, then:
+   ```bash
+   # Export it locally so you can verify the tunnel end-to-end
+   export WEBHOOK_URL="https://<your-tunnel-url>"
+   curl -sS -X POST "$WEBHOOK_URL/events" \
+     -H "content-type: application/json" \
+     -H "x-demo-token: office-hours-demo" \
+     -d '{"demo":"tunnel-check","run_id":"0","sha":"0000000","jobs":{"tunnel":"success"}}'
+   ```
+   Then paste the same URL into the `WEBHOOK_URL` **repo variable** on GitHub
+   (Settings → Variables → Actions → New repository variable).
 6. **Browser windows arranged left-to-right on the projector:**
    - Window A: `slides/index.html`  (projector view)
    - Window B: `slides/notes.html`  (presenter laptop screen only)
