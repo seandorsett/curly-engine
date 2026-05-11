@@ -66,6 +66,25 @@
         border-bottom-width: 2px; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
   .timer { font-family: var(--mono); }
   .row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  /* ---- Q&A best-practices layout ---- */
+  .bp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; flex: 1; min-height: 0; }
+  .bp-card { background: #010409; border: 1px solid var(--line); border-radius: 10px;
+             padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; overflow: auto; }
+  .bp-q { display: flex; gap: 10px; align-items: flex-start; }
+  .bp-a { display: flex; gap: 10px; align-items: flex-start; }
+  .bp-badge { flex-shrink: 0; font-family: var(--mono); font-size: 12px; font-weight: 700;
+              padding: 2px 8px; border-radius: 6px; margin-top: 2px; }
+  .bp-badge.q { background: rgba(88,166,255,.18); color: var(--accent); border: 1px solid rgba(88,166,255,.4); }
+  .bp-badge.a { background: rgba(126,231,135,.18); color: var(--accent-2); border: 1px solid rgba(126,231,135,.4); }
+  .bp-q .text { font-size: 16px; font-weight: 600; line-height: 1.4; color: var(--fg); }
+  .bp-a .text { font-size: 15px; line-height: 1.55; color: #adbac7; }
+  .bp-num { position: absolute; top: 18px; right: 20px; font-family: var(--mono); font-size: 11px;
+            color: var(--line); }
+  .bp-card { position: relative; }
+  .bp-section-icon { font-size: 52px; margin-bottom: 4px; }
+  .bp-toc { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 28px; margin-top: 8px; }
+  .bp-toc li { font-size: 16px; color: var(--muted); list-style: none; padding-left: 0; margin: 0; }
+  .bp-toc li b { color: var(--fg); }
 </style>
 </head>
 <body>
@@ -278,6 +297,162 @@
     <li><b>deployment: false</b>: the environment must still exist in repo settings; approvals/wait-timers still apply.</li>
     <li><b>deployment: false</b>: jobs that previously listened for <code>deployment_status</code> webhooks won't see these runs &mdash; intentional, but worth auditing.</li>
   </ul>
+</template>
+
+<template class="slide-src"
+  data-notes="Transition slide. Say: 'before we open the floor, a rapid-fire round of 10 best practices — things that come up constantly in code review and Actions audits. Q&A format: I'll pose the question, give the answer, and we'll keep it moving. Flag anything you want to dig into at the end.'">
+  <span class="eyebrow">Best practices</span>
+  <h1>10 GitHub Actions practices worth knowing</h1>
+  <p style="color: var(--muted); font-size: 19px;">Q&amp;A format &middot; five slides &middot; two practices per slide</p>
+  <ul class="bp-toc">
+    <li><b>1.</b> Scope permissions per job</li>
+    <li><b>2.</b> Cancel stale PR runs</li>
+    <li><b>3.</b> Pin actions to a commit SHA</li>
+    <li><b>4.</b> Cache dependency installs</li>
+    <li><b>5.</b> Set explicit job timeouts</li>
+    <li><b>6.</b> Reusable workflows over copy-paste</li>
+    <li><b>7.</b> Filter triggers with paths</li>
+    <li><b>8.</b> Surface test results as annotations</li>
+    <li><b>9.</b> Manage artifact retention</li>
+    <li><b>10.</b> Scope secrets to the step, not the job</li>
+  </ul>
+</template>
+
+<template class="slide-src"
+  data-notes="Practice 1 — permissions. Most people leave this at the default (read/write everything). Each job should list exactly what it needs: contents:read for a test job, packages:write for a publish job, etc. Set a restrictive default at the workflow level and escalate per-job. | Practice 2 — concurrency. Without this, 10 rapid pushes queue 10 runs. The group key scopes cancellation: use github.ref for branch-level, or github.workflow+github.ref for a tighter scope. In-progress cancellation means only the latest push runs.">
+  <h2>Best practices 1 &amp; 2</h2>
+  <div class="bp-grid">
+    <div class="bp-card">
+      <span class="bp-num">#1</span>
+      <div class="bp-q"><span class="bp-badge q">Q</span><span class="text">How do I lock down what a workflow can write to my repo?</span></div>
+      <div class="bp-a"><span class="bp-badge a">A</span><span class="text">Declare <code>permissions:</code> at the <b>job level</b>, not the workflow level. Set <code>contents: read</code> as the workflow default and grant elevated scopes (e.g. <code>packages: write</code>) only to the specific job that needs them. Least-privilege at the job boundary.</span></div>
+<pre style="margin-top:6px; font-size:12px"><span class="k">permissions</span>: <span class="s">read-all</span>   <span class="c"># workflow default</span>
+<span class="k">jobs</span>:
+  <span class="n">publish</span>:
+    <span class="k">permissions</span>:
+      <span class="k">packages</span>: <span class="s">write</span>  <span class="c"># escalate only here</span></pre>
+    </div>
+    <div class="bp-card">
+      <span class="bp-num">#2</span>
+      <div class="bp-q"><span class="bp-badge q">Q</span><span class="text">How do I stop wasting CI minutes when developers push rapidly?</span></div>
+      <div class="bp-a"><span class="bp-badge a">A</span><span class="text">Add a <code>concurrency:</code> block keyed to the ref. Setting <code>cancel-in-progress: true</code> automatically cancels the previous run when a new commit lands on the same branch — only the latest run completes.</span></div>
+<pre style="margin-top:6px; font-size:12px"><span class="k">concurrency</span>:
+  <span class="k">group</span>: <span class="s">${{ github.workflow }}-${{ github.ref }}</span>
+  <span class="k">cancel-in-progress</span>: <span class="n">true</span></pre>
+    </div>
+  </div>
+</template>
+
+<template class="slide-src"
+  data-notes="Practice 3 — SHA pinning. Tags like @v4 are mutable — a maintainer (or attacker) can move the tag. A full commit SHA is immutable. The human-readable tag goes in a comment next to it so future reviewers know what they're looking at. Dependabot or a tool like Renovate can keep SHAs fresh. | Practice 4 — caching. The setup-* family of actions has a cache: true input that handles this automatically. For custom toolchains, use actions/cache with a key that includes the hash of the lock file. A stale cache hit is worse than no cache, so the lock file in the key is non-negotiable.">
+  <h2>Best practices 3 &amp; 4</h2>
+  <div class="bp-grid">
+    <div class="bp-card">
+      <span class="bp-num">#3</span>
+      <div class="bp-q"><span class="bp-badge q">Q</span><span class="text">Is it safe to reference a third-party action with <code>@v4</code>?</span></div>
+      <div class="bp-a"><span class="bp-badge a">A</span><span class="text">No — tags are mutable. Pin to a <b>full commit SHA</b> for any action you don't control. Add the human-readable tag as a comment. Let Renovate or Dependabot keep the SHA current.</span></div>
+<pre style="margin-top:6px; font-size:12px"><span class="c"># risky</span>
+- <span class="k">uses</span>: <span class="s">actions/checkout@v4</span>
+<span class="c"># safe</span>
+- <span class="k">uses</span>: <span class="s">actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683</span>
+          <span class="c"># v4.2.2</span></pre>
+    </div>
+    <div class="bp-card">
+      <span class="bp-num">#4</span>
+      <div class="bp-q"><span class="bp-badge q">Q</span><span class="text">My workflow spends 3 minutes on <code>pip install</code> every single run. How do I fix it?</span></div>
+      <div class="bp-a"><span class="bp-badge a">A</span><span class="text">Enable the <code>cache:</code> input on <code>actions/setup-python</code> (and its siblings). For custom toolchains use <code>actions/cache</code> with a key that hashes the lock file — that ensures a changed <code>requirements.txt</code> busts the cache automatically.</span></div>
+<pre style="margin-top:6px; font-size:12px">- <span class="k">uses</span>: <span class="s">actions/setup-python@v5</span>
+  <span class="k">with</span>:
+    <span class="k">python-version</span>: <span class="s">"3.12"</span>
+    <span class="k">cache</span>: <span class="s">pip</span>       <span class="c"># key includes requirements hash</span></pre>
+    </div>
+  </div>
+</template>
+
+<template class="slide-src"
+  data-notes="Practice 5 — timeouts. The GitHub-hosted default is 6 hours. A stuck test suite or network hang can silently consume that. Set a realistic ceiling per job — most builds under 30 min, most deployments under 15. For individual long-running steps, use the step-level timeout-minutes too. | Practice 6 — reusable workflows. workflow_call turns any workflow into a callable unit. The caller passes inputs and secrets; the callee runs on its own runners. The alternative — copy-pasting 50 lines of YAML — means every repo drifts independently. One central workflow file = one place to patch.">
+  <h2>Best practices 5 &amp; 6</h2>
+  <div class="bp-grid">
+    <div class="bp-card">
+      <span class="bp-num">#5</span>
+      <div class="bp-q"><span class="bp-badge q">Q</span><span class="text">A runaway job consumed 6 hours of CI minutes. How do I prevent that?</span></div>
+      <div class="bp-a"><span class="bp-badge a">A</span><span class="text">Set <code>timeout-minutes:</code> on every job. The default is 360 min (6 hours). Most jobs should be &lt; 30 min. Also set it on individual <code>steps</code> for commands that can hang (e.g. integration-test suites).</span></div>
+<pre style="margin-top:6px; font-size:12px"><span class="k">jobs</span>:
+  <span class="n">test</span>:
+    <span class="k">runs-on</span>: <span class="s">ubuntu-latest</span>
+    <span class="k">timeout-minutes</span>: <span class="n">20</span>   <span class="c"># not 360</span></pre>
+    </div>
+    <div class="bp-card">
+      <span class="bp-num">#6</span>
+      <div class="bp-q"><span class="bp-badge q">Q</span><span class="text">I copy-paste the same 50 lines of YAML into every repo. Is there a better way?</span></div>
+      <div class="bp-a"><span class="bp-badge a">A</span><span class="text">Yes — <b>reusable workflows</b> (<code>on: workflow_call</code>). Extract the shared logic into a central repo and call it with <code>uses:</code>. Inputs and secrets are passed explicitly; the pattern is one file to patch instead of N.</span></div>
+<pre style="margin-top:6px; font-size:12px"><span class="c"># caller</span>
+<span class="k">jobs</span>:
+  <span class="n">build</span>:
+    <span class="k">uses</span>: <span class="s">org/platform/.github/workflows/build.yml@main</span>
+    <span class="k">with</span>:
+      <span class="k">node-version</span>: <span class="s">"22"</span></pre>
+    </div>
+  </div>
+</template>
+
+<template class="slide-src"
+  data-notes="Practice 7 — path filters. Without paths:, a docs typo fix triggers your full integration suite. paths: and paths-ignore: accept glob patterns. Combine with pull_request so PRs also benefit. One common gotcha: if all changed files match paths-ignore: the workflow is skipped entirely — remember to set a required-status-checks bypass for that case. | Practice 8 — test annotations. Raw logs don't give reviewers context. JUnit XML via dorny/test-reporter (or the built-in test summary API) surfaces failures as PR annotations and a structured job summary. Engineers see exactly which test failed without digging through logs.">
+  <h2>Best practices 7 &amp; 8</h2>
+  <div class="bp-grid">
+    <div class="bp-card">
+      <span class="bp-num">#7</span>
+      <div class="bp-q"><span class="bp-badge q">Q</span><span class="text">My workflow triggers on every push, even for docs-only changes. How do I filter?</span></div>
+      <div class="bp-a"><span class="bp-badge a">A</span><span class="text">Use <code>on.push.paths:</code> (and <code>paths-ignore:</code>) to restrict triggers to files that affect the build. Combine with <code>on.pull_request.paths:</code> for the same effect on PRs. Glob patterns work.</span></div>
+<pre style="margin-top:6px; font-size:12px"><span class="k">on</span>:
+  <span class="k">push</span>:
+    <span class="k">paths</span>:
+      - <span class="s">"src/**"</span>
+      - <span class="s">"requirements*.txt"</span>
+    <span class="k">paths-ignore</span>:
+      - <span class="s">"docs/**"</span>
+      - <span class="s">"*.md"</span></pre>
+    </div>
+    <div class="bp-card">
+      <span class="bp-num">#8</span>
+      <div class="bp-q"><span class="bp-badge q">Q</span><span class="text">Our test failures are buried in 2,000 lines of logs. How do we surface them?</span></div>
+      <div class="bp-a"><span class="bp-badge a">A</span><span class="text">Emit a JUnit XML report and upload it; pair with a reporting action or the job-summary API. Failures appear as <b>PR annotations</b> and a structured summary — reviewers see the failing test name, not a wall of text.</span></div>
+<pre style="margin-top:6px; font-size:12px">- <span class="k">run</span>: <span class="s">pytest --junit-xml=report.xml</span>
+- <span class="k">uses</span>: <span class="s">dorny/test-reporter@v1</span>
+  <span class="k">if</span>: <span class="s">always()</span>
+  <span class="k">with</span>:
+    <span class="k">reporter</span>: <span class="s">java-junit</span>
+    <span class="k">path</span>: <span class="s">report.xml</span></pre>
+    </div>
+  </div>
+</template>
+
+<template class="slide-src"
+  data-notes="Practice 9 — artifact retention. GitHub's default retention is 90 days. Most artifacts (build outputs, test reports) are only needed for days. Every MB-day costs storage quota. Set retention-days: to the minimum you'll realistically use. Also: don't upload if nothing downstream reads the artifact. | Practice 10 — secret scoping. The most common leak vector is echoing secrets in run: scripts or setting them at the job/env level where every subsequent step sees them. Set env: at the step level only. Pass the secret as an environment variable (never interpolate directly into a shell string) so the runner masks it and the shell doesn't expand it in an unsafe context.">
+  <h2>Best practices 9 &amp; 10</h2>
+  <div class="bp-grid">
+    <div class="bp-card">
+      <span class="bp-num">#9</span>
+      <div class="bp-q"><span class="bp-badge q">Q</span><span class="text">Artifacts are eating our storage quota. What's the fix?</span></div>
+      <div class="bp-a"><span class="bp-badge a">A</span><span class="text">Set <code>retention-days:</code> on every <code>upload-artifact</code> step to the minimum useful window (often 3–7 days for build artifacts, 30 for release binaries). Also: only upload what a downstream job or a human will actually read.</span></div>
+<pre style="margin-top:6px; font-size:12px">- <span class="k">uses</span>: <span class="s">actions/upload-artifact@v4</span>
+  <span class="k">with</span>:
+    <span class="k">name</span>: <span class="s">test-report</span>
+    <span class="k">path</span>: <span class="s">report.xml</span>
+    <span class="k">retention-days</span>: <span class="n">7</span>   <span class="c"># not 90</span></pre>
+    </div>
+    <div class="bp-card">
+      <span class="bp-num">#10</span>
+      <div class="bp-q"><span class="bp-badge q">Q</span><span class="text">How do I use a secret in a script without accidentally leaking it into the log?</span></div>
+      <div class="bp-a"><span class="bp-badge a">A</span><span class="text">Scope <code>env:</code> to the <b>step</b> that needs it, not the job. Pass secrets as environment variables — never interpolate <code>${{ secrets.X }}</code> directly into a shell string. The runner masks env-var values; inline interpolation bypasses that protection.</span></div>
+<pre style="margin-top:6px; font-size:12px"><span class="c"># risky — interpolated into shell string</span>
+- <span class="k">run</span>: <span class="s">curl -H "Authorization: ${{ secrets.TOKEN }}"</span>
+<span class="c"># safe — passed as env var, runner masks it</span>
+- <span class="k">run</span>: <span class="s">curl -H "Authorization: $API_TOKEN"</span>
+  <span class="k">env</span>:
+    <span class="k">API_TOKEN</span>: ${{ secrets.TOKEN }}</pre>
+    </div>
+  </div>
 </template>
 
 <template class="slide-src"
