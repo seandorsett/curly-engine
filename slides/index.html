@@ -215,6 +215,7 @@
     <li><b>Alternate binaries.</b> Same image, different daemon (e.g. <code>redis-sentinel</code> instead of <code>redis-server</code>).</li>
   </ul>
   <p class="pill warn" style="margin-top:auto">Gotcha: <code>entrypoint</code> replaces the image default. If you only need to pass args, set <code>command:</code> alone.</p>
+  <p class="pill warn">Gotcha: <code>secrets</code> context is <b>not</b> allowed in <code>services.&lt;svc&gt;.command</code> / <code>.options</code>. Use <code>services.&lt;svc&gt;.env</code> or a step-level <code>env:</code> instead.</p>
 </template>
 
 <template class="slide-src"
