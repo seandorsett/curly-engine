@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>curly-engine &middot; webhook harness</title>
+<style>
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #8b949e;
+    --accent: #58a6ff; --ok: #7ee787; --warn: #f0883e; --bad: #ff7b72;
+    --card: #161b22; --line: #30363d;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--fg);
+               font: 14px/1.5 -apple-system, system-ui, sans-serif; }
+  header { display: flex; justify-content: space-between; align-items: center;
+           padding: 14px 22px; border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0; font-size: 18px; letter-spacing: -.2px; }
+  header h1 small { color: var(--muted); font-weight: 400; margin-left: 8px; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px;
+          font-family: var(--mono); font-size: 12px;
+          background: rgba(88,166,255,.12); color: var(--accent);
+          border: 1px solid rgba(88,166,255,.35); }
+  .pill.live    { background: rgba(126,231,135,.12); color: var(--ok); border-color: rgba(126,231,135,.35); }
+  .pill.down    { background: rgba(255,123,114,.12); color: var(--bad); border-color: rgba(255,123,114,.35); }
+  .controls { display: flex; gap: 10px; padding: 12px 22px; align-items: center; flex-wrap: wrap; }
+  .controls input, .controls select {
+    background: var(--card); color: var(--fg); border: 1px solid var(--line);
+    padding: 6px 10px; border-radius: 6px; font: inherit; min-width: 160px;
+  }
+  .controls button {
+    background: var(--card); color: var(--fg); border: 1px solid var(--line);
+    padding: 6px 12px; border-radius: 6px; font: inherit; cursor: pointer;
+  }
+  .controls button:hover { border-color: var(--accent); color: var(--accent); }
+  table { width: calc(100% - 44px); margin: 0 22px 22px; border-collapse: collapse; }
+  thead th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px;
+             color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  tbody td { padding: 10px; border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 13px;
+             vertical-align: top; }
+  tbody tr:hover { background: rgba(88,166,255,.06); }
+  tbody tr.new { animation: flash 1.2s ease-out; }
+  @keyframes flash { from { background: rgba(126,231,135,.18); } to { background: transparent; } }
+  .src-workflow { color: var(--accent); }
+  .src-github   { color: var(--warn); }
+  .res-success  { color: var(--ok); }
+  .res-failure  { color: var(--bad); }
+  .res-skipped, .res-cancelled { color: var(--muted); }
+  details { background: var(--card); border: 1px solid var(--line); border-radius: 6px;
+            padding: 8px 10px; margin: 4px 0 0; }
+  details pre { margin: 6px 0 0; font: 12px/1.5 var(--mono); color: var(--muted);
+                white-space: pre-wrap; word-break: break-word; }
+  .empty { padding: 60px 22px; text-align: center; color: var(--muted); }
+  .counts { color: var(--muted); margin-left: auto; font-family: var(--mono); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>curly-engine harness <small>live webhook + workflow event monitor</small></h1>
+  <span id="status" class="pill down">connecting&hellip;</span>
+</header>
+<div class="controls">
+  <input id="q"          placeholder="filter (run id, demo, sha, sender)" />
+  <select id="kind">
+    <option value="">all kinds</option>
+  </select>
+  <select id="source">
+    <option value="">all sources</option>
+    <option value="workflow">workflow</option>
+    <option value="github">github</option>
+  </select>
+  <button id="clear">clear table</button>
+  <button id="reset">reset server buffer</button>
+  <span class="counts" id="counts">0 events</span>
+</div>
+<table id="tbl">
+  <thead>
+    <tr>
+      <th style="width: 80px">time</th>
+      <th style="width: 80px">source</th>
+      <th style="width: 160px">kind</th>
+      <th style="width: 110px">run</th>
+      <th>summary</th>
+    </tr>
+  </thead>
+  <tbody id="rows"></tbody>
+</table>
+<div id="empty" class="empty">No events yet. Trigger a workflow or POST to <code>/events</code>.</div>
+
+<script>
+(() => {
+  const $    = (id) => document.getElementById(id);
+  const rows = $('rows');
+  const empty = $('empty');
+  const counts = $('counts');
+  const all = [];           // every event we've seen this session
+  const kinds = new Set();
+
+  function fmtTime(iso) {
+    const d = new Date(iso);
+    return d.toTimeString().slice(0, 8);
+  }
+
+  function summaryFor(ev) {
+    if (ev.source === 'workflow') {
+      const jobs = ev.jobs || {};
+      const parts = Object.entries(jobs).map(([k, v]) => `${k}=<span class="res-${v}">${v}</span>`);
+      return `<b>${ev.kind}</b> &middot; ${parts.join(' &middot; ') || '(no job map)'}`;
+    }
+    if (ev.source === 'github') {
+      const bits = [];
+      if (ev.action) bits.push(`action=${ev.action}`);
+      if (ev.repo)   bits.push(`repo=${ev.repo}`);
+      if (ev.sender) bits.push(`by=${ev.sender}`);
+      return `<b>${ev.kind}</b> &middot; ${bits.join(' &middot; ') || ''}`;
+    }
+    return ev.kind;
+  }
+
+  function row(ev) {
+    const tr = document.createElement('tr');
+    tr.dataset.id     = ev.id;
+    tr.dataset.kind   = ev.kind;
+    tr.dataset.source = ev.source;
+    tr.dataset.q      = [ev.runId, ev.sha, ev.kind, ev.repo, ev.sender, JSON.stringify(ev.jobs || {})]
+                         .filter(Boolean).join(' ').toLowerCase();
+    tr.className = 'new';
+    const runCell = ev.runId
+      ? `<a href="https://github.com/seandorsett/curly-engine/actions/runs/${ev.runId}" target="_blank" rel="noopener">${ev.runId}</a>`
+      : '&mdash;';
+    tr.innerHTML = `
+      <td>${fmtTime(ev.receivedAt)}</td>
+      <td class="src-${ev.source}">${ev.source}</td>
+      <td>${ev.kind}</td>
+      <td>${runCell}</td>
+      <td>
+        ${summaryFor(ev)}
+        <details><summary>raw</summary><pre>${escapeHtml(JSON.stringify(ev.raw || ev, null, 2))}</pre></details>
+      </td>`;
+    setTimeout(() => tr.classList.remove('new'), 1500);
+    return tr;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+
+  function applyFilter() {
+    const q   = $('q').value.trim().toLowerCase();
+    const k   = $('kind').value;
+    const src = $('source').value;
+    let visible = 0;
+    for (const tr of rows.children) {
+      const hit = (!q   || tr.dataset.q.includes(q)) &&
+                  (!k   || tr.dataset.kind === k) &&
+                  (!src || tr.dataset.source === src);
+      tr.style.display = hit ? '' : 'none';
+      if (hit) visible += 1;
+    }
+    empty.style.display = visible === 0 ? '' : 'none';
+    counts.textContent = `${visible} / ${all.length} events`;
+  }
+
+  function add(ev) {
+    all.push(ev);
+    if (!kinds.has(ev.kind)) {
+      kinds.add(ev.kind);
+      const opt = document.createElement('option');
+      opt.value = opt.textContent = ev.kind;
+      $('kind').appendChild(opt);
+    }
+    rows.prepend(row(ev));
+    applyFilter();
+  }
+
+  // ---- SSE ----
+  let es;
+  function connect() {
+    es = new EventSource('/stream');
+    es.onopen    = () => { $('status').textContent = 'live'; $('status').className = 'pill live'; };
+    es.onerror   = () => { $('status').textContent = 'reconnecting'; $('status').className = 'pill down'; };
+    es.onmessage = (m) => {
+      try { add(JSON.parse(m.data)); } catch (e) { console.warn('bad event', e, m.data); }
+    };
+    // named events (kind) also arrive here - EventSource fires onmessage only
+    // for unnamed; we re-bind addEventListener so kinds work too.
+    es.addEventListener('open', () => $('status').classList.add('live'));
+  }
+  connect();
+
+  // ---- controls ----
+  $('q').oninput      = applyFilter;
+  $('kind').onchange  = applyFilter;
+  $('source').onchange= applyFilter;
+  $('clear').onclick  = () => { rows.innerHTML = ''; all.length = 0; applyFilter(); };
+  $('reset').onclick  = async () => {
+    if (!confirm('Clear the server-side buffer too?')) return;
+    await fetch('/reset', { method: 'POST' });
+    rows.innerHTML = ''; all.length = 0; applyFilter();
+  };
+})();
+</script>
+</body>
+</html>

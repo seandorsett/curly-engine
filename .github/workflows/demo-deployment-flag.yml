@@ -1,0 +1,127 @@
+# Demo 2 - `deployment: false` for environments
+#
+# An environment block normally does two things at once:
+#   1. Gates the job behind the environment's protection rules + scoped secrets.
+#   2. Emits a `Deployment` (and a `DeploymentStatus`) on the repo, which means
+#      a row in the Environments UI, a webhook, and a green/red bubble on the
+#      commit. That's perfect for prod, but noisy for jobs that just need the
+#      *secrets* and *approvals* - e.g. running a smoke test that touches a
+#      shared service, or a one-off data export.
+#
+# The new `deployment: false` key gives you the gate + secrets WITHOUT
+# recording a deployment. Use it whenever the work isn't really shipping a
+# version of your app.
+name: demo-2 deployment-false environments
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: which environment to exercise
+        type: choice
+        default: staging
+        options: [staging, production, ops-readonly]
+  push:
+    paths:
+      - ".github/workflows/demo-deployment-flag.yml"
+
+permissions:
+  contents: read
+  deployments: write   # required so the "real" deployment job can write status
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job A: classic deployment. Creates a Deployment, shows up in the env tab,
+  # fires `deployment` + `deployment_status` webhooks. This is what we want
+  # for an actual release of the app.
+  # ---------------------------------------------------------------------------
+  ship-it:
+    name: ship to ${{ inputs.target || 'staging' }}
+    if: inputs.target != 'ops-readonly'
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.target || 'staging' }}
+      url: https://${{ inputs.target || 'staging' }}.curly-engine.example.com
+    steps:
+      - uses: actions/checkout@v4
+      - name: pretend to deploy
+        run: |
+          echo "shipping ${{ github.sha }} to ${{ inputs.target || 'staging' }}"
+          echo "API_TOKEN length = ${#API_TOKEN}"
+        env:
+          API_TOKEN: ${{ secrets.API_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # Job B: read-only ops task that *needs* the prod credentials and approval
+  # gate but is NOT a deployment. With `deployment: false`, we get:
+  #   - the same required-reviewer prompt as ship-it
+  #   - the same environment-scoped secrets (API_TOKEN)
+  #   - NO deployment row, NO deployment webhook, NO green bubble on the SHA.
+  #
+  # This is the headline of the demo - show the runs side by side in the UI.
+  # ---------------------------------------------------------------------------
+  audit-prod-config:
+    name: audit prod config (no deployment record)
+    if: inputs.target == 'ops-readonly' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      deployment: false       # <- THE feature we're showing off
+    steps:
+      - uses: actions/checkout@v4
+      - name: hit the read-only admin endpoint
+        env:
+          API_TOKEN: ${{ secrets.API_TOKEN }}
+        run: |
+          echo "auditing prod with a scoped token (length=${#API_TOKEN})"
+          # In a real demo, replace with: curl -sS -H "authorization: Bearer $API_TOKEN" https://api.example.com/audit
+          echo '{"ok":true,"checks":42,"drift":0}'
+
+  # ---------------------------------------------------------------------------
+  # Job C: scheduled-style maintenance. Same idea - gate behind an environment
+  # for secrets/approvals, but don't pollute the Deployments timeline.
+  # ---------------------------------------------------------------------------
+  rotate-cache-keys:
+    name: rotate cache keys
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      deployment: false
+    steps:
+      - name: rotate
+        env:
+          ROTATION_TOKEN: ${{ secrets.ROTATION_TOKEN }}
+        run: |
+          test -n "$ROTATION_TOKEN" || { echo "missing token"; exit 1; }
+          echo "rotated 3 cache keys at $(date -u +%FT%TZ)"
+
+  # ---------------------------------------------------------------------------
+  # Stream the result of all three jobs into the harness so the audience can
+  # see which ones produced a deployment event and which ones did not.
+  # The harness UI filters by event type, so the contrast is visible live.
+  # ---------------------------------------------------------------------------
+  notify-harness:
+    name: notify webhook harness
+    needs: [ship-it, audit-prod-config, rotate-cache-keys]
+    if: always() && vars.WEBHOOK_URL != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: push status to harness
+        env:
+          WEBHOOK_URL: ${{ vars.WEBHOOK_URL }}
+          WEBHOOK_TOKEN: ${{ secrets.WEBHOOK_TOKEN }}
+        run: |
+          payload=$(jq -n \
+            --arg demo "deployment-false" \
+            --arg run  "${{ github.run_id }}" \
+            --arg sha  "${{ github.sha }}" \
+            --arg ship   "${{ needs.ship-it.result }}" \
+            --arg audit  "${{ needs.audit-prod-config.result }}" \
+            --arg rotate "${{ needs.rotate-cache-keys.result }}" \
+            '{demo:$demo, run_id:$run, sha:$sha,
+              jobs:{ship_it:$ship, audit:$audit, rotate:$rotate}}')
+          curl -sS -X POST "$WEBHOOK_URL/events" \
+            -H "content-type: application/json" \
+            -H "x-demo-token: $WEBHOOK_TOKEN" \
+            -d "$payload"
